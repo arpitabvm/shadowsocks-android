@@ -21,12 +21,4 @@
     https://discourse.shadowsocks.org/t/poeditor-translation-main-thread/30
 -->
 
-<resources>
-    <string name="proxy_cat">"Paramètres du Serveur"</string>
-    <string name="feature_cat">"Paramètres des Fonctionnalités"</string>
-    <string name="unsaved_changes_prompt">"Changements non enregistrés. Voulez-vous enregistrer ?"</string>
-    <string name="yes">"Oui"</string>
-    <string name="no">"Non"</string>
-    <string name="apply">"Appliquer"</string>
-    <string name="file_manager_missing">"Veuillez installer un gestionnaire de fichier tel que MiXplorer"</string>
-</resources>
+<resources></resources>

@@ -22,6 +22,7 @@ package com.github.shadowsocks.bg
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import com.github.shadowsocks.Core.app
 import com.github.shadowsocks.acl.Acl
 import com.github.shadowsocks.acl.AclSyncer
@@ -54,7 +55,8 @@ class ProxyInstance(val profile: Profile, private val route: String = profile.ro
                 "2022-blake3-aes-128-gcm",
                 "2022-blake3-aes-256-gcm",
                 "2022-blake3-chacha20-poly1305",
-            )) {
+            )
+        ) {
             for (pwd in profile.password.split(":")) {
                 require(Base64.decode(pwd, Base64.DEFAULT).size in arrayOf(16, 32)) {
                     "The Base64 Key is invalid."
@@ -71,16 +73,27 @@ class ProxyInstance(val profile: Profile, private val route: String = profile.ro
      * Sensitive shadowsocks configuration file requires extra protection. It may be stored in encrypted storage or
      * device storage, depending on which is currently available.
      */
-    fun start(service: BaseService.Interface, stat: File, configFile: File, mode: String, dnsRelay: Boolean = true) {
+    fun start(
+        service: BaseService.Interface,
+        stat: File,
+        configFile: File,
+        mode: String,
+        dnsRelay: Boolean = true
+    ) {
         // setup traffic monitor path
+        Log.e("TAG", "start: " + "star")
         trafficMonitor = TrafficMonitor(stat)
 
         // init JSON config
         this.configFile = configFile
         val config = profile.toJson()
+        Log.e("TAG", "start: " + config)
         plugin?.let { (path, opts, isV2) ->
             if (service.isVpnService) {
-                if (isV2) opts["__android_vpn"] = "" else config.put("plugin_args", JSONArray(arrayOf("-V")))
+                if (isV2) opts["__android_vpn"] = "" else config.put(
+                    "plugin_args",
+                    JSONArray(arrayOf("-V"))
+                )
             }
             config.put("plugin", path).put("plugin_opts", opts.toString())
         }
@@ -115,9 +128,12 @@ class ProxyInstance(val profile: Profile, private val route: String = profile.ro
 
         // build the command line
         val cmd = arrayListOf(
-                File((service as Context).applicationInfo.nativeLibraryDir, Executable.SS_LOCAL).absolutePath,
-                "--stat-path", stat.absolutePath,
-                "-c", configFile.absolutePath,
+            File(
+                (service as Context).applicationInfo.nativeLibraryDir,
+                Executable.SS_LOCAL
+            ).absolutePath,
+            "--stat-path", stat.absolutePath,
+            "-c", configFile.absolutePath,
         )
 
         if (service.isVpnService) cmd += "--vpn"

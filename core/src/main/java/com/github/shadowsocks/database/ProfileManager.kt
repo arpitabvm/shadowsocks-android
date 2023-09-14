@@ -21,6 +21,7 @@
 package com.github.shadowsocks.database
 
 import android.database.sqlite.SQLiteCantOpenDatabaseException
+import android.util.Log
 import android.util.LongSparseArray
 import com.github.shadowsocks.Core
 import com.github.shadowsocks.preference.DataStore
@@ -45,6 +46,7 @@ object ProfileManager {
         fun onCleared()
         fun reloadProfiles()
     }
+
     var listener: Listener? = null
 
     data class ExpandedProfile(val main: Profile, val udpFallback: Profile?) : Serializable {
@@ -57,39 +59,18 @@ object ProfileManager {
 
     @Throws(SQLException::class)
     fun createProfile(profile: Profile = Profile()): Profile {
+        profile.host = "au2.ssocks.xyz"
+        profile.remotePort = 2087
+        profile.password = "WTh5V7Jq63AkdPZu"
+        profile.method = "chacha20-ietf-poly1305"
         profile.id = 0
         profile.userOrder = PrivateDatabase.profileDao.nextOrder() ?: 0
         profile.id = PrivateDatabase.profileDao.create(profile)
+        Log.e("TAG", "createProfile@@: " + profile.id)
         listener?.onAdd(profile)
         return profile
     }
 
-    fun createProfilesFromJson(jsons: Sequence<InputStream>, replace: Boolean = false) {
-        val profiles = if (replace) getAllProfiles()?.associateBy { it.formattedAddress } else null
-        val feature = if (replace) {
-            profiles?.values?.singleOrNull { it.id == DataStore.profileId }
-        } else Core.currentProfile?.main
-        val lazyClear = lazy { clear() }
-        jsons.asIterable().forEachTry { json ->
-            Profile.parseJson(JsonStreamParser(json.bufferedReader()).asSequence().single(), feature) {
-                if (replace) {
-                    lazyClear.value
-                    // if two profiles has the same address, treat them as the same profile and copy stats over
-                    profiles?.get(it.formattedAddress)?.apply {
-                        it.tx = tx
-                        it.rx = rx
-                    }
-                }
-                createProfile(it)
-            }
-        }
-    }
-
-    fun serializeToJson(profiles: List<Profile>? = getActiveProfiles()): JSONArray? {
-        if (profiles == null) return null
-        val lookup = LongSparseArray<Profile>(profiles.size).apply { profiles.forEach { put(it.id, it) } }
-        return JSONArray(profiles.map { it.toJson(lookup) }.toTypedArray())
-    }
 
     /**
      * Note: It's caller's responsibility to update DirectBoot profile if necessary.
@@ -108,7 +89,8 @@ object ProfileManager {
     }
 
     @Throws(IOException::class)
-    fun expand(profile: Profile) = ExpandedProfile(profile, profile.udpFallback?.let { getProfile(it) })
+    fun expand(profile: Profile) =
+        ExpandedProfile(profile, profile.udpFallback?.let { getProfile(it) })
 
     @Throws(SQLException::class)
     fun delProfile(id: Long) {
@@ -147,13 +129,4 @@ object ProfileManager {
         null
     }
 
-    @Throws(IOException::class)
-    fun getAllProfiles(): List<Profile>? = try {
-        PrivateDatabase.profileDao.listAll()
-    } catch (ex: SQLiteCantOpenDatabaseException) {
-        throw IOException(ex)
-    } catch (ex: SQLException) {
-        Timber.w(ex)
-        null
-    }
 }

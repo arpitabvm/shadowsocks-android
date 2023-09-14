@@ -28,6 +28,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.RemoteCallbackList
 import android.os.RemoteException
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.github.shadowsocks.BootReceiver
 import com.github.shadowsocks.Core
@@ -42,10 +43,6 @@ import com.github.shadowsocks.preference.DataStore
 import com.github.shadowsocks.utils.Action
 import com.github.shadowsocks.utils.broadcastReceiver
 import com.github.shadowsocks.utils.readableMessage
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.analytics.ktx.analytics
-import com.google.firebase.analytics.ktx.logEvent
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.*
 import timber.log.Timber
 import java.io.File
@@ -71,7 +68,8 @@ object BaseService {
     const val CONFIG_FILE_UDP = "shadowsocks-udp.conf"
 
     interface ExpectedException
-    class ExpectedExceptionWrapper(e: Exception) : Exception(e.localizedMessage, e), ExpectedException
+    class ExpectedExceptionWrapper(e: Exception) : Exception(e.localizedMessage, e),
+        ExpectedException
 
     class Data internal constructor(private val service: Interface) {
         var state = State.Stopped
@@ -100,14 +98,16 @@ object BaseService {
         }
     }
 
-    class Binder(private var data: Data? = null) : IShadowsocksService.Stub(), CoroutineScope, AutoCloseable {
+    class Binder(private var data: Data? = null) : IShadowsocksService.Stub(), CoroutineScope,
+        AutoCloseable {
         private val callbacks = object : RemoteCallbackList<IShadowsocksServiceCallback>() {
             override fun onCallbackDied(callback: IShadowsocksServiceCallback?, cookie: Any?) {
                 super.onCallbackDied(callback, cookie)
                 stopListeningForBandwidth(callback ?: return)
             }
         }
-        private val bandwidthListeners = mutableMapOf<IBinder, Long>()  // the binder is the real identifier
+        private val bandwidthListeners =
+            mutableMapOf<IBinder, Long>()  // the binder is the real identifier
         override val coroutineContext = Dispatchers.Main.immediate + Job()
         private var looper: Job? = null
 
@@ -139,9 +139,9 @@ object BaseService {
                 delay(bandwidthListeners.values.minOrNull() ?: return)
                 val proxies = listOfNotNull(data?.proxy, data?.udpFallback)
                 val stats = proxies
-                        .map { Pair(it.profile.id, it.trafficMonitor?.requestUpdate()) }
-                        .filter { it.second != null }
-                        .map { Triple(it.first, it.second!!.first, it.second!!.second) }
+                    .map { Pair(it.profile.id, it.trafficMonitor?.requestUpdate()) }
+                    .filter { it.second != null }
+                    .map { Triple(it.first, it.second!!.first, it.second!!.second) }
                 if (stats.any { it.third } && data?.state == State.Connected && bandwidthListeners.isNotEmpty()) {
                     val sum = stats.fold(TrafficStats()) { a, b -> a + b.second }
                     broadcast { item ->
@@ -156,7 +156,11 @@ object BaseService {
 
         override fun startListeningForBandwidth(cb: IShadowsocksServiceCallback, timeout: Long) {
             launch {
-                if (bandwidthListeners.isEmpty() and (bandwidthListeners.put(cb.asBinder(), timeout) == null)) {
+                if (bandwidthListeners.isEmpty() and (bandwidthListeners.put(
+                        cb.asBinder(),
+                        timeout
+                    ) == null)
+                ) {
                     check(looper == null)
                     looper = launch { loop() }
                 }
@@ -165,17 +169,21 @@ object BaseService {
                 val data = data
                 val proxy = data?.proxy ?: return@launch
                 proxy.trafficMonitor?.out.also { stats ->
-                    cb.trafficUpdated(proxy.profile.id, if (stats == null) sum else {
-                        sum += stats
-                        stats
-                    })
+                    cb.trafficUpdated(
+                        proxy.profile.id, if (stats == null) sum else {
+                            sum += stats
+                            stats
+                        }
+                    )
                 }
                 data.udpFallback?.also { udpFallback ->
                     udpFallback.trafficMonitor?.out.also { stats ->
-                        cb.trafficUpdated(udpFallback.profile.id, if (stats == null) TrafficStats() else {
-                            sum += stats
-                            stats
-                        })
+                        cb.trafficUpdated(
+                            udpFallback.profile.id, if (stats == null) TrafficStats() else {
+                                sum += stats
+                                stats
+                            }
+                        )
                     }
                 }
                 cb.trafficUpdated(0, sum)
@@ -219,7 +227,8 @@ object BaseService {
         val tag: String
         fun createNotification(profileName: String): ServiceNotification
 
-        fun onBind(intent: Intent): IBinder? = if (intent.action == Action.SERVICE) data.binder else null
+        fun onBind(intent: Intent): IBinder? =
+            if (intent.action == Action.SERVICE) data.binder else null
 
         fun forceLoad() {
             val s = data.state
@@ -233,19 +242,27 @@ object BaseService {
         val isVpnService get() = false
 
         suspend fun startProcesses() {
-            val context = if (Build.VERSION.SDK_INT < 24 || Core.user.isUserUnlocked) app else Core.deviceStorage
+            val context =
+                if (Build.VERSION.SDK_INT < 24 || Core.user.isUserUnlocked) app else Core.deviceStorage
             val configRoot = context.noBackupFilesDir
             val udpFallback = data.udpFallback
-            data.proxy!!.start(this,
-                    File(Core.deviceStorage.noBackupFilesDir, "stat_main"),
-                    File(configRoot, CONFIG_FILE),
-                    if (udpFallback == null && data.proxy?.plugin == null) "tcp_and_udp" else "tcp_only")
-            if (udpFallback?.plugin != null) throw ExpectedExceptionWrapper(IllegalStateException(
-                    "UDP fallback cannot have plugins"))
-            udpFallback?.start(this,
-                    File(Core.deviceStorage.noBackupFilesDir, "stat_udp"),
-                    File(configRoot, CONFIG_FILE_UDP),
-                    "udp_only", false)
+            data.proxy!!.start(
+                this,
+                File(Core.deviceStorage.noBackupFilesDir, "stat_main"),
+                File(configRoot, CONFIG_FILE),
+                if (udpFallback == null && data.proxy?.plugin == null) "tcp_and_udp" else "tcp_only"
+            )
+            if (udpFallback?.plugin != null) throw ExpectedExceptionWrapper(
+                IllegalStateException(
+                    "UDP fallback cannot have plugins"
+                )
+            )
+            udpFallback?.start(
+                this,
+                File(Core.deviceStorage.noBackupFilesDir, "stat_udp"),
+                File(configRoot, CONFIG_FILE_UDP),
+                "udp_only", false
+            )
             data.localDns = LocalDnsWorker(this::rawResolver).apply { start() }
         }
 
@@ -269,7 +286,6 @@ object BaseService {
             // channge the state
             data.changeState(State.Stopping)
             GlobalScope.launch(Dispatchers.Main.immediate) {
-                Firebase.analytics.logEvent("stop") { param(FirebaseAnalytics.Param.METHOD, tag) }
                 data.connectingJob?.cancelAndJoin() // ensure stop connecting first
                 this@Interface as Service
                 // we use a coroutineScope here to allow clean-up in parallel
@@ -306,10 +322,15 @@ object BaseService {
         }
 
         fun persistStats() =
-                listOfNotNull(data.proxy, data.udpFallback).forEach { it.trafficMonitor?.persistStats(it.profile.id) }
+            listOfNotNull(
+                data.proxy,
+                data.udpFallback
+            ).forEach { it.trafficMonitor?.persistStats(it.profile.id) }
 
-        suspend fun preInit() { }
-        suspend fun rawResolver(query: ByteArray) = DnsResolverCompat.resolveRawOnActiveNetwork(query)
+        suspend fun preInit() {}
+        suspend fun rawResolver(query: ByteArray) =
+            DnsResolverCompat.resolveRawOnActiveNetwork(query)
+
         suspend fun openConnection(url: URL) = url.openConnection()
 
         fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -326,7 +347,8 @@ object BaseService {
             val (profile, fallback) = expanded
             try {
                 data.proxy = ProxyInstance(profile)
-                data.udpFallback = if (fallback == null) null else ProxyInstance(fallback, profile.route)
+                data.udpFallback =
+                    if (fallback == null) null else ProxyInstance(fallback, profile.route)
             } catch (e: IllegalArgumentException) {
                 data.notification = createNotification("")
                 stopRunner(false, e.message)
@@ -344,7 +366,6 @@ object BaseService {
             }
 
             data.notification = createNotification(profile.formattedName)
-            Firebase.analytics.logEvent("start") { param(FirebaseAnalytics.Param.METHOD, tag) }
 
             data.changeState(State.Connecting)
             data.connectingJob = GlobalScope.launch(Dispatchers.Main) {
@@ -375,7 +396,10 @@ object BaseService {
                     // if the job was cancelled, it is canceller's responsibility to call stopRunner
                 } catch (exc: Throwable) {
                     if (exc is ExpectedException) Timber.d(exc) else Timber.w(exc)
-                    stopRunner(false, "${getString(R.string.service_failed)}: ${exc.readableMessage}")
+                    stopRunner(
+                        false,
+                        "${getString(R.string.service_failed)}: ${exc.readableMessage}"
+                    )
                 } finally {
                     data.connectingJob = null
                 }

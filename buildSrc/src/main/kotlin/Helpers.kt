@@ -10,6 +10,7 @@ import org.gradle.api.plugins.ExtensionAware
 import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.getByName
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmOptions
+import java.io.File
 import java.util.*
 
 const val lifecycleVersion = "2.5.1"
@@ -74,6 +75,8 @@ fun Project.setupCore() {
 }
 
 private val abiCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86" to 3, "x86_64" to 4)
+
+
 fun Project.setupApp() {
     setupCore()
 
@@ -92,22 +95,14 @@ fun Project.setupApp() {
             "zh-rCN",
             "zh-rTW",
         ))
-        buildTypes {
-            getByName("debug") {
-                isPseudoLocalesEnabled = true
-            }
-            getByName("release") {
-                isShrinkResources = true
-                isMinifyEnabled = true
-                proguardFile(getDefaultProguardFile("proguard-android.txt"))
-            }
-        }
+
         lint.disable += "RemoveWorkManagerInitializer"
         packagingOptions.jniLibs.useLegacyPackaging = true
         splits.abi {
             isEnable = true
             isUniversalApk = true
         }
+
     }
 
     dependencies.add("implementation", project(":core"))

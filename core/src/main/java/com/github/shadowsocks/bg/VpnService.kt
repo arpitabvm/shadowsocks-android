@@ -31,6 +31,7 @@ import android.os.ParcelFileDescriptor
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
+import android.util.Log
 import com.github.shadowsocks.Core
 import com.github.shadowsocks.VpnRequestActivity
 import com.github.shadowsocks.acl.Acl
@@ -65,12 +66,15 @@ class VpnService : BaseVpnService(), BaseService.Interface {
         } finally {
             try {
                 Os.close(this)
-            } catch (_: ErrnoException) { }
+            } catch (_: ErrnoException) {
+            }
         }
     }
 
-    private inner class ProtectWorker : ConcurrentLocalSocketListener("ShadowsocksVpnThread",
-            File(Core.deviceStorage.noBackupFilesDir, "protect_path")) {
+    private inner class ProtectWorker : ConcurrentLocalSocketListener(
+        "ShadowsocksVpnThread",
+        File(Core.deviceStorage.noBackupFilesDir, "protect_path")
+    ) {
         override fun acceptInternal(socket: LocalSocket) {
             if (socket.inputStream.read() == -1) return
             val success = socket.ancillaryFileDescriptors!!.single()!!.use { fd ->
@@ -90,7 +94,8 @@ class VpnService : BaseVpnService(), BaseService.Interface {
             }
             try {
                 socket.outputStream.write(if (success) 0 else 1)
-            } catch (_: IOException) { }        // ignore connection early close
+            } catch (_: IOException) {
+            }        // ignore connection early close
         }
     }
 
@@ -101,21 +106,27 @@ class VpnService : BaseVpnService(), BaseService.Interface {
     override val data = BaseService.Data(this)
     override val tag: String get() = "ShadowsocksVpnService"
     override fun createNotification(profileName: String): ServiceNotification =
-            ServiceNotification(this, profileName, "service-vpn")
+        ServiceNotification(this, profileName, "service-vpn")
 
     private var conn: ParcelFileDescriptor? = null
     private var worker: ProtectWorker? = null
     private var active = false
     private var metered = false
+
     @Volatile
     private var underlyingNetwork: Network? = null
         set(value) {
             field = value
             if (active) setUnderlyingNetworks(underlyingNetworks)
         }
-    private val underlyingNetworks get() =
-        // clearing underlyingNetworks makes Android 9 consider the network to be metered
-        if (Build.VERSION.SDK_INT == 28 && metered) null else underlyingNetwork?.let { arrayOf(it) }
+    private val underlyingNetworks
+        get() =
+            // clearing underlyingNetworks makes Android 9 consider the network to be metered
+            if (Build.VERSION.SDK_INT == 28 && metered) null else underlyingNetwork?.let {
+                arrayOf(
+                    it
+                )
+            }
 
     override fun onBind(intent: Intent) = when (intent.action) {
         SERVICE_INTERFACE -> super<BaseVpnService>.onBind(intent)
@@ -135,9 +146,15 @@ class VpnService : BaseVpnService(), BaseService.Interface {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.e("TAG", "onStartCommand: " + DataStore.serviceMode)
         if (DataStore.serviceMode == Key.modeVpn) {
             if (prepare(this) != null) {
-                startActivity(Intent(this, VpnRequestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                startActivity(
+                    Intent(
+                        this,
+                        VpnRequestActivity::class.java
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
             } else return super<BaseService.Interface>.onStartCommand(intent, flags, startId)
         }
         stopRunner()
@@ -146,9 +163,10 @@ class VpnService : BaseVpnService(), BaseService.Interface {
 
     override suspend fun preInit() = DefaultNetworkListener.start(this) { underlyingNetwork = it }
     override suspend fun rawResolver(query: ByteArray) =
-            // no need to listen for network here as this is only used for forwarding local DNS queries.
-            // retries should be attempted by client.
-            DnsResolverCompat.resolveRaw(underlyingNetwork ?: throw IOException("no network"), query)
+    // no need to listen for network here as this is only used for forwarding local DNS queries.
+        // retries should be attempted by client.
+        DnsResolverCompat.resolveRaw(underlyingNetwork ?: throw IOException("no network"), query)
+
     override suspend fun openConnection(url: URL) = DefaultNetworkListener.get().openConnection(url)
 
     override suspend fun startProcesses() {
@@ -162,26 +180,26 @@ class VpnService : BaseVpnService(), BaseService.Interface {
     private suspend fun startVpn(): FileDescriptor {
         val profile = data.proxy!!.profile
         val builder = Builder()
-                .setConfigureIntent(Core.configureIntent(this))
-                .setSession(profile.formattedName)
-                .setMtu(VPN_MTU)
-                .addAddress(PRIVATE_VLAN4_CLIENT, 30)
-                .addDnsServer(PRIVATE_VLAN4_ROUTER)
+            .setConfigureIntent(Core.configureIntent(this))
+            .setSession(profile.formattedName)
+            .setMtu(VPN_MTU)
+            .addAddress(PRIVATE_VLAN4_CLIENT, 30)
+            .addDnsServer(PRIVATE_VLAN4_ROUTER)
 
         if (profile.ipv6) builder.addAddress(PRIVATE_VLAN6_CLIENT, 126)
 
         if (profile.proxyApps) {
             val me = packageName
             profile.individual.split('\n')
-                    .filter { it != me }
-                    .forEach {
-                        try {
-                            if (profile.bypass) builder.addDisallowedApplication(it)
-                            else builder.addAllowedApplication(it)
-                        } catch (ex: PackageManager.NameNotFoundException) {
-                            Timber.w(ex)
-                        }
+                .filter { it != me }
+                .forEach {
+                    try {
+                        if (profile.bypass) builder.addDisallowedApplication(it)
+                        else builder.addAllowedApplication(it)
+                    } catch (ex: PackageManager.NameNotFoundException) {
+                        Timber.w(ex)
                     }
+                }
             if (!profile.bypass) builder.addAllowedApplication(me)
         }
 
@@ -190,6 +208,7 @@ class VpnService : BaseVpnService(), BaseService.Interface {
                 builder.addRoute("0.0.0.0", 0)
                 if (profile.ipv6) builder.addRoute("::", 0)
             }
+
             else -> {
                 resources.getStringArray(R.array.bypass_private_route).forEach {
                     val subnet = Subnet.fromString(it)!!
@@ -209,13 +228,15 @@ class VpnService : BaseVpnService(), BaseService.Interface {
         val conn = builder.establish() ?: throw NullConnectionException()
         this.conn = conn
 
-        val cmd = arrayListOf(File(applicationInfo.nativeLibraryDir, Executable.TUN2SOCKS).absolutePath,
-                "--netif-ipaddr", PRIVATE_VLAN4_ROUTER,
-                "--socks-server-addr", "${DataStore.listenAddress}:${DataStore.portProxy}",
-                "--tunmtu", VPN_MTU.toString(),
-                "--sock-path", "sock_path",
-                "--dnsgw", "127.0.0.1:${DataStore.portLocalDns}",
-                "--loglevel", "warning")
+        val cmd = arrayListOf(
+            File(applicationInfo.nativeLibraryDir, Executable.TUN2SOCKS).absolutePath,
+            "--netif-ipaddr", PRIVATE_VLAN4_ROUTER,
+            "--socks-server-addr", "${DataStore.listenAddress}:${DataStore.portProxy}",
+            "--tunmtu", VPN_MTU.toString(),
+            "--sock-path", "sock_path",
+            "--dnsgw", "127.0.0.1:${DataStore.portLocalDns}",
+            "--loglevel", "warning"
+        )
         if (profile.ipv6) {
             cmd += "--netif-ip6addr"
             cmd += PRIVATE_VLAN6_ROUTER
@@ -237,7 +258,12 @@ class VpnService : BaseVpnService(), BaseService.Interface {
         while (true) try {
             delay(50L shl tries)
             LocalSocket().use { localSocket ->
-                localSocket.connect(LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM))
+                localSocket.connect(
+                    LocalSocketAddress(
+                        path,
+                        LocalSocketAddress.Namespace.FILESYSTEM
+                    )
+                )
                 localSocket.setFileDescriptorsForSend(arrayOf(fd))
                 localSocket.outputStream.write(42)
             }

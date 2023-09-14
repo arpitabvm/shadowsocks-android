@@ -40,27 +40,30 @@ import kotlinx.coroutines.launch
 /**
  * This object should be compact as it will not get GC-ed.
  */
-class ShadowsocksConnection(private var listenForDeath: Boolean = false) : ServiceConnection, IBinder.DeathRecipient {
+class ShadowsocksConnection(private var listenForDeath: Boolean = false) : ServiceConnection,
+    IBinder.DeathRecipient {
     companion object {
-        val serviceClass get() = when (DataStore.serviceMode) {
-            Key.modeProxy -> ProxyService::class
-            Key.modeVpn -> VpnService::class
-            Key.modeTransproxy -> TransproxyService::class
-            else -> throw UnknownError()
-        }.java
+        val serviceClass
+            get() = when (DataStore.serviceMode) {
+                Key.modeProxy -> ProxyService::class
+                Key.modeVpn -> VpnService::class
+                Key.modeTransproxy -> TransproxyService::class
+                else -> throw UnknownError()
+            }.java
     }
 
     interface Callback {
         fun stateChanged(state: BaseService.State, profileName: String?, msg: String?)
-        fun trafficUpdated(profileId: Long, stats: TrafficStats) { }
-        fun trafficPersisted(profileId: Long) { }
+        fun trafficUpdated(profileId: Long, stats: TrafficStats) {}
+        fun trafficPersisted(profileId: Long) {}
 
         fun onServiceConnected(service: IShadowsocksService)
+
         /**
          * Different from Android framework, this method will be called even when you call `detachService`.
          */
-        fun onServiceDisconnected() { }
-        fun onBinderDied() { }
+        fun onServiceDisconnected() {}
+        fun onBinderDied() {}
     }
 
     private var connectionActive = false
@@ -73,10 +76,17 @@ class ShadowsocksConnection(private var listenForDeath: Boolean = false) : Servi
                 callback.stateChanged(BaseService.State.values()[state], profileName, msg)
             }
         }
+
         override fun trafficUpdated(profileId: Long, stats: TrafficStats) {
             val callback = callback ?: return
-            GlobalScope.launch(Dispatchers.Main.immediate) { callback.trafficUpdated(profileId, stats) }
+            GlobalScope.launch(Dispatchers.Main.immediate) {
+                callback.trafficUpdated(
+                    profileId,
+                    stats
+                )
+            }
         }
+
         override fun trafficPersisted(profileId: Long) {
             val callback = callback ?: return
             GlobalScope.launch(Dispatchers.Main.immediate) { callback.trafficPersisted(profileId) }
@@ -89,7 +99,8 @@ class ShadowsocksConnection(private var listenForDeath: Boolean = false) : Servi
             try {
                 if (value > 0) service?.startListeningForBandwidth(serviceCallback, value)
                 else service?.stopListeningForBandwidth(serviceCallback)
-            } catch (_: RemoteException) { }
+            } catch (_: RemoteException) {
+            }
             field = value
         }
     var service: IShadowsocksService? = null
@@ -103,8 +114,12 @@ class ShadowsocksConnection(private var listenForDeath: Boolean = false) : Servi
             check(!callbackRegistered)
             service.registerCallback(serviceCallback)
             callbackRegistered = true
-            if (bandwidthTimeout > 0) service.startListeningForBandwidth(serviceCallback, bandwidthTimeout)
-        } catch (_: RemoteException) { }
+            if (bandwidthTimeout > 0) service.startListeningForBandwidth(
+                serviceCallback,
+                bandwidthTimeout
+            )
+        } catch (_: RemoteException) {
+        }
         callback!!.onServiceConnected(service)
     }
 
@@ -125,7 +140,8 @@ class ShadowsocksConnection(private var listenForDeath: Boolean = false) : Servi
         val service = service
         if (service != null && callbackRegistered) try {
             service.unregisterCallback(serviceCallback)
-        } catch (_: RemoteException) { }
+        } catch (_: RemoteException) {
+        }
         callbackRegistered = false
     }
 
@@ -142,15 +158,18 @@ class ShadowsocksConnection(private var listenForDeath: Boolean = false) : Servi
         unregisterCallback()
         if (connectionActive) try {
             context.unbindService(this)
-        } catch (_: IllegalArgumentException) { }   // ignore
+        } catch (_: IllegalArgumentException) {
+        }   // ignore
         connectionActive = false
         if (listenForDeath) try {
             binder?.unlinkToDeath(this, 0)
-        } catch (_: NoSuchElementException) { }
+        } catch (_: NoSuchElementException) {
+        }
         binder = null
         try {
             service?.stopListeningForBandwidth(serviceCallback)
-        } catch (_: RemoteException) { }
+        } catch (_: RemoteException) {
+        }
         service = null
         callback = null
     }

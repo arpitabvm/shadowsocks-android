@@ -17,9 +17,6 @@ buildscript {
         val kotlinVersion = rootProject.extra["kotlinVersion"].toString()
         classpath(rootProject.extra["androidPlugin"].toString())
         classpath(kotlin("gradle-plugin", kotlinVersion))
-        classpath("com.google.android.gms:oss-licenses-plugin:0.10.6")
-        classpath("com.google.firebase:firebase-crashlytics-gradle:2.9.2")
-        classpath("com.google.gms:google-services:4.3.15")
         classpath("com.vanniktech:gradle-maven-publish-plugin:0.24.0")
         classpath("org.jetbrains.dokka:dokka-gradle-plugin:1.7.20")
         classpath("org.mozilla.rust-android-gradle:plugin:0.9.3")
@@ -33,6 +30,8 @@ allprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.buildDir)
 }
+
+
 
 // skip uploading the mapping to Crashlytics
 subprojects {
