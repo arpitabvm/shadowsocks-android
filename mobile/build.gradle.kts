@@ -1,7 +1,7 @@
 import com.nishtahir.Versions.android
 
 plugins {
-    id("com.android.library")
+    id("com.android.application")
     kotlin("android")
     id("kotlin-parcelize")
 }
@@ -22,7 +22,7 @@ android {
         sourceCompatibility = javaVersion
         targetCompatibility = javaVersion
     }
-//    defaultConfig.applicationId = "com.github.shadowsocks"
+    defaultConfig.applicationId = "com.github.shadowsocks"
 
     signingConfigs {
         create("release") {
